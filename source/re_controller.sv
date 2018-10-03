@@ -1,0 +1,199 @@
+// $Id: $
+// File name:   re_controller.sv
+// Created:     11/20/2017
+// Author:      Alexandria Symanski
+// Lab Section: 337-03
+// Version:     1.0  Initial Design Entry
+// Description: USB Receiver Controller
+
+module re_controller
+(
+input clk, n_rst, eop, d_edge, crc_16_passed, crc_5_passed, byte_processed,
+input [0:7] data_byte,
+output reg receiving, byte_ready,in_token, out_token, crc_err, data_enable, crc_16_enable, crc_5_enable, crc_16_check, crc_5_check, eop_found, host_ack, host_nack, crc_init
+); 
+
+typedef enum bit [3:0]
+{
+	IDLE,
+	SYNC_FOUND,
+	PID,
+	IN_ADDR,
+	OUT_ADDR,
+	DATA,
+	ACK,
+	NACK,
+	ENDP,
+	EOP,
+	CRC16,
+	CRC5
+
+} stateType;
+
+reg [3:0] state, n_state;
+
+always_ff @ (posedge clk, negedge n_rst)
+begin
+	if (!n_rst) begin
+		state <= IDLE;
+	end else begin
+		state <= n_state;
+	end
+end
+
+always_comb
+begin 
+	n_state = state;
+	crc_err = 0;
+	receiving = 0;
+	in_token = 0;
+	out_token = 0;
+	host_ack = 0;
+	host_nack = 0;
+	byte_ready = 0;
+	data_enable = 0;
+	crc_16_enable = 0;
+	crc_5_enable = 0;
+	crc_16_check = 0;
+	crc_5_check = 0;
+	eop_found = 0;
+	crc_init = 0;
+	
+	case(state)
+		
+		IDLE: begin 
+			if(d_edge) begin
+				n_state = SYNC_FOUND;
+			end
+		end
+		SYNC_FOUND: begin 
+			receiving = 1;
+			data_enable = 1;
+			if (byte_processed) begin
+				if(data_byte == 8'b01111111) begin
+					n_state = PID;
+				end 
+			end
+		end
+		PID: begin
+			receiving = 1;
+			data_enable = 1;
+			crc_init = 1;
+			if (byte_processed) begin
+				if(data_byte == 8'b10010110) begin
+					n_state = IN_ADDR;
+				end else if (data_byte == 8'b00010111) begin
+					n_state = OUT_ADDR;
+				end else if (data_byte == 8'b00111100) begin //set to DATA0
+					n_state = DATA;
+				end else if (data_byte == 8'b00101101) begin
+					n_state = ACK;
+				end else if (data_byte == 8'b10100101) begin
+					n_state = NACK;
+				end else begin
+					n_state = IDLE; //should error be raised?
+				end
+			end else begin
+				n_state = n_state;
+			end
+		end
+		IN_ADDR: begin
+			receiving  = 1;
+			data_enable = 1;
+			crc_5_enable = 1;
+			if (byte_processed) begin
+				if(data_byte == 8'b10100101) begin //device address
+					n_state = ENDP;
+					in_token = 1;
+				end else begin
+					n_state = IDLE;
+				end
+			end
+		end
+		OUT_ADDR: begin
+			receiving  = 1;
+			data_enable = 1;
+			crc_5_enable = 1;
+			if (byte_processed) begin
+				if(data_byte == 8'b10100101) begin //device address
+					n_state = ENDP;
+					out_token = 1;
+				end else begin
+					n_state = IDLE;
+				end
+			end
+		end
+
+		ENDP: begin
+			receiving = 1;
+			data_enable = 1;
+			crc_5_enable = 1;
+			if (byte_processed) begin
+				n_state = EOP;
+			end
+		end
+		EOP: begin
+			receiving = 1;
+			data_enable = 1;
+			crc_5_enable = 1;
+			if (eop) begin
+				n_state = CRC5;
+				//eop_found = 1;
+				receiving = 0;
+				data_enable = 0;
+				crc_5_enable = 0;		
+				crc_5_check = 1;
+			end
+		end
+		CRC5: begin
+			n_state = IDLE;
+			//eop_found = 1;
+			crc_5_check = 1;
+			if(!crc_5_passed) begin
+				crc_err = 1;
+			end
+		end
+		DATA: begin
+			data_enable = 1;
+			receiving = 1;
+			crc_16_enable = 1;
+			byte_ready = byte_processed;
+			if (eop) begin
+				n_state = CRC16;	
+				//eop_found = 1;
+				receiving = 0;
+				data_enable = 0;
+				crc_16_enable = 0;
+				crc_16_check = 1;
+			end
+		end
+		CRC16: begin 
+			n_state = IDLE;
+			crc_16_check = 1;
+			eop_found = 1;
+			if (!crc_16_passed) begin
+				crc_err = 1;
+			end
+		end	
+
+		ACK: begin
+			receiving = 1;
+			data_enable = 1;
+			host_ack = 1;
+			if (eop) begin
+				n_state = IDLE;
+				eop_found = 1;
+			end
+		end
+		NACK: begin
+			receiving = 1;
+			data_enable = 1;
+			host_nack = 1;
+			if (eop) begin
+				n_state = IDLE;
+				eop_found = 1;
+			end
+		end
+	endcase
+end
+endmodule

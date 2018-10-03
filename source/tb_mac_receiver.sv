@@ -1,0 +1,130 @@
+// $Id: $
+// File name:   tb_mac_transmitter.sv
+// Created:     12/5/2017
+// Author:      Vishnu Gopal
+// Lab Section: 337-03
+// Version:     1.0  Initial Design Entry
+// Description: .
+`timescale 1ns / 10ps
+
+module tb_mac_receiver();
+
+	// Define local parameters used by the test bench
+	localparam	CLK_PERIOD		= 5.3;
+	
+	// Declare DUT portmap signals
+	logic       tb_clk;
+	logic       tb_reset;
+
+	logic [7:0] tb_rxd;
+	logic       tb_rxdv;
+	logic       tb_rxer;
+	logic       tb_fifo_full;
+
+        logic [1:0] tb_mac_rec_state;
+	logic       tb_wr_en;
+	logic       tb_wr_start;
+	logic       tb_wr_error;
+	logic [7:0] tb_wr_data;
+	
+	// Declare test bench signals
+	integer tb_test_num;
+	
+	// Clock generation block
+	always
+	begin
+		tb_clk = 1'b0;
+		#(CLK_PERIOD/2.0);
+		tb_clk = 1'b1;
+		#(CLK_PERIOD/2.0);
+	end
+	
+	// DUT Port map
+	mac_receiver DUT
+	(
+            .clk(tb_clk),
+	    .reset(tb_reset),
+
+	    .rxd(tb_rxd),
+	    .rxdv(tb_rxdv),
+	    .rxer(tb_rxer),
+	    .fifo_full(tb_fifo_full),
+            .mac_rec_state(tb_mac_rec_state),
+	    .wr_en(tb_wr_en),
+	    .wr_start(tb_wr_start),
+	    .wr_error(tb_wr_error),
+	    .wr_data(tb_wr_data)
+	);
+
+	// Tasks
+	task data_byte([7:0]d_byte);
+		tb_rxd = d_byte;
+		#(CLK_PERIOD);
+	endtask
+
+
+	// Test bench main process
+	initial
+	begin
+	// Initialize all of the test inputs
+	tb_test_num = 0;
+	tb_fifo_full = 1'b0;
+	tb_rxdv = 1'b0;
+	tb_rxer = 1'b0;
+	#(0.1);
+        tb_reset = 1'b1;
+	#(CLK_PERIOD);
+	tb_reset = 1'b0;
+
+        // Test Case 1:  
+	tb_test_num = tb_test_num + 1;
+	$info("Test %d", tb_test_num);
+        #(CLK_PERIOD);
+        #(CLK_PERIOD);
+        #(CLK_PERIOD);
+        #(CLK_PERIOD/2.0);
+	tb_rxdv = 1'b1;
+	data_byte(8'h55);
+	data_byte(8'h55);
+	data_byte(8'h55);
+	data_byte(8'hD5);
+	data_byte(8'hAB);
+	data_byte(8'hCD);
+	data_byte(8'hEF); 
+	data_byte(8'h00);
+	data_byte(8'h00);
+	data_byte(8'h00);
+	data_byte(8'h00);
+	data_byte(8'h00);
+        tb_rxdv = 1'b0;
+        #(CLK_PERIOD);
+        #(CLK_PERIOD);
+        #(CLK_PERIOD);
+        #(CLK_PERIOD);
+        #(CLK_PERIOD);
+        #(CLK_PERIOD);
+	tb_test_num = 1;
+	tb_fifo_full = 1'b0;
+	tb_rxdv = 1'b0;
+	tb_rxer = 1'b0;
+        
+        tb_rxdv = 1'b1;
+	data_byte(8'h55);
+	data_byte(8'h55);
+	data_byte(8'h55);
+	data_byte(8'hD5);
+	data_byte(8'hAB);
+	data_byte(8'hCD);
+	data_byte(8'hEF); 
+	data_byte(8'h00);
+	data_byte(8'h00);
+	tb_rxer = 1'b1;
+	data_byte(8'h00);
+        tb_rxer = 1'b0;
+	data_byte(8'h00);
+	data_byte(8'h00);
+        tb_rxdv = 1'b0;
+        
+
+end
+endmodule

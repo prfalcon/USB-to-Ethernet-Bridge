@@ -1,0 +1,182 @@
+// $Id: $
+// File name:   usb_ether_bridge.sv
+// Created:     12/5/2017
+// Author:      Alejandro Orozco
+// Lab Section: 337-03
+// Version:     1.0  Initial Design Entry
+// Description: Top-Level port map for usb-ethernet bridge
+module usb_ether_bridge
+(
+	input wire clk,
+	input wire n_rst,
+	// USB
+	input wire d_plus_in,
+	input wire d_minus_in,
+	output reg d_plus_out,
+	output reg d_minus_out,
+	// Ethernet MAC Receiver
+	input reg [7:0] rxd,
+	input reg       rxdv,
+        input reg       rxer,
+        //MAC Transmitter
+	input  reg data_ready,
+        output reg [7:0] txd,
+	output reg txen
+	
+	
+	
+);
+	reg ack_done;
+	reg crc_error;
+	reg ack_rcvd;
+	reg nak_rcvd;
+	reg byte_ready;
+	reg eop_found;
+	reg fifo_empty_e2u;
+	reg fifo_empty_u2e;
+	reg fifo_full_u2e;
+	reg fifo_full_e2u;
+	reg in_token;
+	reg out_token;
+	reg read_enable_e2u;
+	reg read_start_e2u;
+	reg read_error_e2u;
+	reg write_enable_u2e;
+	reg write_start_u2e;
+	reg write_error_u2e;
+	reg read_enable_u2e;
+	reg read_start_u2e;
+	reg read_error_u2e;
+	reg write_enable_e2u;
+	reg write_start_e2u;
+	reg write_error_e2u;
+	reg tx_enable;
+	reg tx_complete;
+	reg handshake_prep;
+	reg [7:0] read_data_u2e;
+	reg [7:0] write_data_u2e;
+	reg [7:0] read_data_e2u;
+	reg [7:0] write_data_e2u;
+	reg [1:0] handshake;
+	reg [1:0] mac_rec_state; 
+	reg [2:0] mac_tr_state;
+
+	usb_controller USB_CTRL
+	(
+		.clk(clk),
+		.n_rst(n_rst),
+		.ack_done(ack_done),
+		.crc_error(crc_error),
+		.ack_rcvd(ack_rcvd),
+		.nak_rcvd(nak_rcvd),
+		.byte_ready(byte_ready),
+		.eop_found(eop_found),
+		.fifo_empty(fifo_empty_e2u),
+		.fifo_full(fifo_full_u2e),
+		.in_token(in_token),
+		.out_token(out_token),
+		.read_enable(read_enable_e2u),
+		.read_start(read_start_e2u),
+		.read_error(read_error_e2u),
+		.write_enable(write_enable_u2e),
+		.write_start(write_start_u2e),
+		.write_error(write_error_u2e),
+		.tx_enable(tx_enable),
+		.handshake_prep(handshake_prep),
+		.handshake(handshake)
+	);
+
+	ether2usb_fifo E2U
+	(
+		.clk(clk),
+		.n_rst(n_rst),
+		.clear(clear),
+		.read_enable(read_enable_e2u),
+		.read_start(read_start_e2u),
+		.read_error(read_error_e2u),
+		.write_enable(write_enable_e2u),
+		.write_start(write_start_e2u),
+		.write_error(write_error_e2u),
+		.write_data(write_data_e2u),
+		.read_data(read_data_e2u),
+		.fifo_empty(fifo_empty_e2u),
+		.fifo_full(fifo_full_e2u)
+	);
+
+	usb2ether_fifo U2E
+	(
+		.clk(clk),
+		.n_rst(n_rst),
+		.clear(eop_found),
+		.read_enable(read_enable_u2e),
+		.read_start(read_start_u2e),
+		.read_error(read_error_u2e),
+		.write_enable(write_enable_u2e),
+		.write_start(write_start_u2e),
+		.write_error(write_error_u2e),
+		.write_data(write_data_u2e),
+		.read_data(read_data_u2e),
+		.fifo_empty(fifo_empty_u2e),
+		.fifo_full(fifo_full_u2e)
+	);
+		
+	usb_transmitter TX
+	(
+		.clk(clk),
+		.n_rst(n_rst),
+		.tx_ena(tx_enable),
+		.ack_prep(handshake_prep),
+		.parallel_in(read_data_e2u),
+		.pid(handshake),
+		.d_plus(d_plus_out),
+		.d_minus(d_minus_out),
+		.tx_complete(tx_complete),
+		.ack_done(ack_done)
+	);
+
+        mac_receiver MACR
+	(	
+		.clk(clk),
+		.reset(~n_rst),
+		.rxd(rxd),
+                .rxdv(rxdv),
+                .rxer(rxer),
+                .fifo_full(fifo_full_e2u),
+                .mac_rec_state(mac_rec_state),
+                .wr_en(write_enable),
+                .wr_start(write_start_e2u),
+                .wr_error(write_error_e2u),
+                .wr_data(write_data_e2u)
+        );
+
+	mac_transmitter MACT
+	(
+		.clk(clk),
+		.reset(~n_rst),
+		.rd_data(read_data_u2e),
+                .data_ready(data_ready),
+                .fifo_empty(fifo_empty_u2e),
+                .mac_tr_state(mac_tr_state),
+                .rd_en(read_enable_u2e),
+                .rd_start(read_start_u2e),
+                .txd(txd),
+                .txen(txen)
+        );
+
+	usb_receiver URX
+	(	
+		.clk(clk),
+		.n_rst(n_rst),
+		.d_plus(d_plus_in),
+		.d_minus(d_minus_in),
+		.crc_err(crc_error),
+		.in_token(in_token),
+		.out_token(out_token),
+		.byte_ready(byte_ready),
+		.host_ack(ack_rcvd),
+		.host_nack(nak_rcvd),
+		.eop_found(eop_found),
+		.data_byte(write_data_u2e)
+	);
+
+endmodule
